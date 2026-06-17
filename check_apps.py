@@ -48,7 +48,7 @@ def update_status(page_id, status):
     )
 
 def main():
-    results = notion.databases.query(database_id=DATABASE_ID)
+    results = notion.data_sources.query(data_source_id=DATABASE_ID)
 
     for page in results["results"]:
         props = page["properties"]
