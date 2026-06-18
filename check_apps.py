@@ -8,7 +8,6 @@ DATABASE_ID = os.environ["NOTION_DATABASE_ID"].split("/")[-1].split("-")[-1].spl
 
 notion = Client(auth=NOTION_TOKEN)
 
-URL_PROPERTY = "URL"
 STATUS_PROPERTY = "STATUS"
 
 
@@ -19,6 +18,49 @@ def normalize_url(url):
     if not url.startswith("http"):
         url = "https://" + url
     return url
+
+
+def extract_url_from_text(text):
+    if not text:
+        return None
+    match = re.search(r"(https?://play\.google\.com/[^\s,]+|play\.google\.com/[^\s,]+)", text)
+    return match.group(1) if match else None
+
+
+def get_text_from_property(prop):
+    if not prop:
+        return ""
+
+    prop_type = prop.get("type")
+
+    if prop_type == "title":
+        return " ".join([x.get("plain_text", "") for x in prop.get("title", [])])
+
+    if prop_type == "rich_text":
+        return " ".join([x.get("plain_text", "") for x in prop.get("rich_text", [])])
+
+    if prop_type == "url":
+        return prop.get("url") or ""
+
+    return ""
+
+
+def get_url_from_page(props):
+    for name in ["URL", "Url", "url", "LINK", "Link", "link"]:
+        prop = props.get(name)
+        if prop:
+            text = get_text_from_property(prop)
+            found = extract_url_from_text(text) or text
+            if found and "play.google.com" in found:
+                return normalize_url(found)
+
+    for prop in props.values():
+        text = get_text_from_property(prop)
+        found = extract_url_from_text(text)
+        if found:
+            return normalize_url(found)
+
+    return None
 
 
 def is_google_play_terminated(html, status_code):
@@ -36,7 +78,7 @@ def is_google_play_terminated(html, status_code):
     if status_code in [404, 410]:
         return True
 
-    return any(word in html for word in terminated_keywords)
+    return any(keyword in html for keyword in terminated_keywords)
 
 
 def developer_page_has_apps(html):
@@ -45,7 +87,6 @@ def developer_page_has_apps(html):
     app_signals = [
         "/store/apps/details?id=",
         "aria-label=\"install\"",
-        "install",
         "contains ads",
         "in-app purchases",
     ]
@@ -56,17 +97,12 @@ def developer_page_has_apps(html):
 def is_live(url):
     url = normalize_url(url)
 
-    if not url:
-        return None
-
     try:
         response = requests.get(
             url,
             timeout=25,
             allow_redirects=True,
-            headers={
-                "User-Agent": "Mozilla/5.0"
-            }
+            headers={"User-Agent": "Mozilla/5.0"}
         )
 
         html = response.text
@@ -75,11 +111,9 @@ def is_live(url):
         if is_google_play_terminated(html, response.status_code):
             return False
 
-        # Developer page check
         if "play.google.com/store/apps/dev" in final_url:
             return developer_page_has_apps(html)
 
-        # Single app page check
         if "play.google.com/store/apps/details" in final_url:
             return True
 
@@ -107,14 +141,14 @@ def main():
 
     for page in results["results"]:
         props = page["properties"]
-        url = props.get(URL_PROPERTY, {}).get("url")
+
+        url = get_url_from_page(props)
 
         if not url:
-            print("Skipped row: no URL")
+            print("Skipped row: no Google Play URL found")
             continue
 
-        live = is_live(url)
-        status = "LIVE" if live else "Terminated"
+        status = "LIVE" if is_live(url) else "Terminated"
 
         update_status(page["id"], status)
         print(f"{url} -> {status}")
