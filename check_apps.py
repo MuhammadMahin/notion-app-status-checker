@@ -94,49 +94,34 @@ def main():
             if URL_PROPERTY not in props:
                 print("URL property not found")
                 continue
+                
 
-           url = props[URL_PROPERTY]["url"]
+            url = props[URL_PROPERTY]["url"]
 
-# If URL property is empty, try extracting from COMPANY title
-if not url:
-    company_text = ""
+            if not url:
+                company_text = ""
 
-    if props["COMPANY"]["title"]:
-        company_text = props["COMPANY"]["title"][0]["plain_text"]
+                if props["COMPANY"]["title"]:
+                    company_text = props["COMPANY"]["title"][0]["plain_text"]
 
-    import re
+                import re
 
-    match = re.search(
-        r'(https?://play\.google\.com/\S+|play\.google\.com/\S+)',
-        company_text
-    )
+                match = re.search(
+                    r'(https?://play\.google\.com/\S+|play\.google\.com/\S+)',
+                    company_text
+                )
 
-    if match:
-        url = match.group(1)
+                if match:
+                    url = match.group(1)
 
-        if not url.startswith("http"):
-            url = "https://" + url
+                    if not url.startswith("http"):
+                        url = "https://" + url
 
-        print(f"Extracted URL from COMPANY: {url}")
+                    print(f"Extracted URL from COMPANY: {url}")
 
-if not url:
-    print("Skipped row: no URL found anywhere")
-    continue
-
-            status = "LIVE" if is_live(url) else "Terminated"
-
-            try:
-                update_status(page["id"], status)
-                print(f"{url} -> {status}")
-
-            except Exception as e:
-                print(f"Failed updating {url}: {e}")
+            if not url:
+                print("Skipped row: no URL found anywhere")
                 continue
-
-        except Exception as e:
-            print(f"Error processing row {i}: {e}")
-            continue
-
 
 if __name__ == "__main__":
     main()
