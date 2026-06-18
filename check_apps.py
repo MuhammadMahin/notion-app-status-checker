@@ -10,7 +10,6 @@ notion = Client(auth=NOTION_TOKEN)
 URL_PROPERTY = "URL"
 STATUS_PROPERTY = "STATUS"
 
-
 def is_live(url):
     if not url:
         return False
@@ -21,39 +20,54 @@ def is_live(url):
     try:
         response = requests.get(
             url,
-            timeout=20,
+            timeout=30,
             allow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0"}
+            headers={
+                "User-Agent": "Mozilla/5.0"
+            }
         )
 
         html = response.text.lower()
+        final_url = response.url.lower()
 
-        bad_keywords = [
+        # Definite termination messages
+        terminated_keywords = [
             "we're sorry, the requested url was not found",
             "requested url was not found",
             "not found on this server",
             "item not found",
-            "404"
+            "error 404"
         ]
 
         if response.status_code in [404, 410]:
             return False
 
-        for keyword in bad_keywords:
-            if keyword in html:
-                return False
+        if any(keyword in html for keyword in terminated_keywords):
+            return False
 
         # Developer page
-        if "play.google.com/store/apps/dev" in response.url.lower():
-            if "/store/apps/details?id=" not in html:
+        if "play.google.com/store/apps/dev" in final_url:
+
+            # If Google redirected to search or homepage, treat as terminated
+            if "search?" in final_url:
                 return False
+
+            # If app links exist on the page, developer is live
+            if "/store/apps/details?id=" in html:
+                return True
+
+            # Otherwise assume terminated
+            return False
+
+        # App page
+        if "play.google.com/store/apps/details" in final_url:
+            return True
 
         return True
 
     except Exception as e:
-        print(e)
+        print(f"Error checking {url}: {e}")
         return False
-
 
 def update_status(page_id, status_name):
     notion.pages.update(
