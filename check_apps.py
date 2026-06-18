@@ -18,49 +18,41 @@ def is_live(url):
         url = "https://" + url
 
     try:
-        response = requests.get(
+        session = requests.Session()
+
+        response = session.get(
             url,
             timeout=30,
             allow_redirects=True,
             headers={
-                "User-Agent": "Mozilla/5.0"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9"
             }
         )
 
         html = response.text.lower()
         final_url = response.url.lower()
 
-        # Definite termination messages
-        terminated_keywords = [
-            "we're sorry, the requested url was not found",
-            "requested url was not found",
-            "not found on this server",
-            "item not found",
-            "error 404"
-        ]
+        print(f"Checking: {url}")
+        print(f"Final URL: {final_url}")
+        print(f"Status code: {response.status_code}")
 
         if response.status_code in [404, 410]:
             return False
 
+        terminated_keywords = [
+            "we're sorry, the requested url was not found",
+            "requested url was not found",
+            "item not found",
+            "not found on this server"
+        ]
+
         if any(keyword in html for keyword in terminated_keywords):
             return False
 
-        # Developer page
-        if "play.google.com/store/apps/dev" in final_url:
-
-            # If Google redirected to search or homepage, treat as terminated
-            if "search?" in final_url:
-                return False
-
-            # If app links exist on the page, developer is live
-            if "/store/apps/details?id=" in html:
-                return True
-
-            # Otherwise assume terminated
-            return False
-
-        # App page
-        if "play.google.com/store/apps/details" in final_url:
+        # Google blocked request
+        if "captcha" in html or "sorry/index" in final_url:
+            print("Google blocked request")
             return True
 
         return True
