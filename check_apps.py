@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 from notion_client import Client
 
@@ -11,31 +12,76 @@ URL_PROPERTY = "URL"
 STATUS_PROPERTY = "STATUS"
 
 
-def is_live(url):
+def normalize_url(url):
     if not url:
         return None
-
+    url = url.strip()
     if not url.startswith("http"):
         url = "https://" + url
+    return url
+
+
+def is_google_play_terminated(html, status_code):
+    html = html.lower()
+
+    terminated_keywords = [
+        "we're sorry, the requested url was not found",
+        "requested url was not found",
+        "not found on this server",
+        "item not found",
+        "error 404",
+        "404.",
+    ]
+
+    if status_code in [404, 410]:
+        return True
+
+    return any(word in html for word in terminated_keywords)
+
+
+def developer_page_has_apps(html):
+    html = html.lower()
+
+    app_signals = [
+        "/store/apps/details?id=",
+        "aria-label=\"install\"",
+        "install",
+        "contains ads",
+        "in-app purchases",
+    ]
+
+    return any(signal in html for signal in app_signals)
+
+
+def is_live(url):
+    url = normalize_url(url)
+
+    if not url:
+        return None
 
     try:
         response = requests.get(
             url,
-            timeout=20,
+            timeout=25,
             allow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0"}
+            headers={
+                "User-Agent": "Mozilla/5.0"
+            }
         )
 
-        text = response.text.lower()
+        html = response.text
+        final_url = response.url.lower()
 
-        if response.status_code == 404:
+        if is_google_play_terminated(html, response.status_code):
             return False
 
-        if "we're sorry, the requested url was not found" in text:
-            return False
+        # Developer page check
+        if "play.google.com/store/apps/dev" in final_url:
+            return developer_page_has_apps(html)
 
-        if "not found" in text and "play.google.com" in url:
-            return False
+        # Single app page check
+        if "play.google.com/store/apps/details" in final_url:
+            return True
 
         return True
 
@@ -61,7 +107,6 @@ def main():
 
     for page in results["results"]:
         props = page["properties"]
-
         url = props.get(URL_PROPERTY, {}).get("url")
 
         if not url:
@@ -72,7 +117,6 @@ def main():
         status = "LIVE" if live else "Terminated"
 
         update_status(page["id"], status)
-
         print(f"{url} -> {status}")
 
 
