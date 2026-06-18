@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 from notion_client import Client
 
@@ -51,12 +52,10 @@ def is_live(url):
         if any(keyword in html for keyword in terminated_keywords):
             return False
 
-        # Google blocked request
         if "captcha" in html or "sorry/index" in final_url:
             print("Google blocked request")
             return True
 
-        # Developer page with no apps
         if "play.google.com/store/apps/dev" in final_url:
             if "/store/apps/details?id=" not in html:
                 return False
@@ -94,17 +93,15 @@ def main():
             if URL_PROPERTY not in props:
                 print("URL property not found")
                 continue
-                
 
             url = props[URL_PROPERTY]["url"]
 
+            # Try extracting from COMPANY if URL column is empty
             if not url:
                 company_text = ""
 
                 if props["COMPANY"]["title"]:
                     company_text = props["COMPANY"]["title"][0]["plain_text"]
-
-                import re
 
                 match = re.search(
                     r'(https?://play\.google\.com/\S+|play\.google\.com/\S+)',
@@ -122,6 +119,19 @@ def main():
             if not url:
                 print("Skipped row: no URL found anywhere")
                 continue
+
+            status = "LIVE" if is_live(url) else "Terminated"
+
+            try:
+                update_status(page["id"], status)
+                print(f"{url} -> {status}")
+
+            except Exception as e:
+                print(f"Failed updating {url}: {e}")
+
+        except Exception as e:
+            print(f"Error processing row {i}: {e}")
+
 
 if __name__ == "__main__":
     main()
