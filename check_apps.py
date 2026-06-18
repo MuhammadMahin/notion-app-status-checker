@@ -10,6 +10,7 @@ notion = Client(auth=NOTION_TOKEN)
 URL_PROPERTY = "URL"
 STATUS_PROPERTY = "STATUS"
 
+
 def is_live(url):
     if not url:
         return False
@@ -55,11 +56,17 @@ def is_live(url):
             print("Google blocked request")
             return True
 
+        # Developer page with no apps
+        if "play.google.com/store/apps/dev" in final_url:
+            if "/store/apps/details?id=" not in html:
+                return False
+
         return True
 
     except Exception as e:
         print(f"Error checking {url}: {e}")
         return False
+
 
 def update_status(page_id, status_name):
     notion.pages.update(
@@ -77,26 +84,36 @@ def update_status(page_id, status_name):
 def main():
     results = notion.databases.query(database_id=DATABASE_ID)
 
-    for page in results["results"]:
-        props = page["properties"]
+    for i, page in enumerate(results["results"], start=1):
 
-        print("Properties found:", props.keys())
+        print(f"\n===== Processing row {i} =====")
 
-        if URL_PROPERTY not in props:
-            print("URL property not found")
+        try:
+            props = page["properties"]
+
+            if URL_PROPERTY not in props:
+                print("URL property not found")
+                continue
+
+            url = props[URL_PROPERTY]["url"]
+
+            if not url:
+                print("Skipped row: no URL")
+                continue
+
+            status = "LIVE" if is_live(url) else "Terminated"
+
+            try:
+                update_status(page["id"], status)
+                print(f"{url} -> {status}")
+
+            except Exception as e:
+                print(f"Failed updating {url}: {e}")
+                continue
+
+        except Exception as e:
+            print(f"Error processing row {i}: {e}")
             continue
-
-        url = props[URL_PROPERTY]["url"]
-
-        if not url:
-            print("Skipped row: no URL")
-            continue
-
-        status = "LIVE" if is_live(url) else "Terminated"
-
-        update_status(page["id"], status)
-
-        print(f"{url} -> {status}")
 
 
 if __name__ == "__main__":
